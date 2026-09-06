@@ -14,10 +14,8 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(
-  app,
-  import.meta.env.VITE_FIREBASE_DATABASE_ID || "ai-studio-539f1622-6027-45aa-83ea-6073132e334a"
-);
+const dbId = import.meta.env.VITE_FIREBASE_DATABASE_ID;
+export const db = dbId ? getFirestore(app, dbId) : getFirestore(app);
 export const storage = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();
 
