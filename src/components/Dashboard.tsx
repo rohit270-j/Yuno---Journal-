@@ -3,7 +3,17 @@ import { User } from 'firebase/auth';
 import { Flame, Book, Sparkles, Mic, Plus, Trash2, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
-import { getUserStats, getRecentEntries, deleteJournalEntry, UserStats, JournalEntry } from '../lib/db-services';
+import { 
+  getUserStats, 
+  getRecentEntries, 
+  deleteJournalEntry, 
+  UserStats, 
+  JournalEntry,
+  subscribeToUserEntries,
+  calculateUserStreak,
+  updateUserStats,
+  parseEntryDate
+} from '../lib/db-services';
 import { useAppStore } from '../store/useAppStore';
 import { getDailySpark } from '../data/dailySparks';
 import EditorModal from './EditorModal';
@@ -13,18 +23,60 @@ import WeeklyInsightCard from './WeeklyInsightCard';
 
 export default function Dashboard({ user }: { user: User }) {
   const { isEditorOpen, setEditorOpen, setActiveEntry, startSparkReflection } = useAppStore();
-  const [stats, setStats] = useState<UserStats | null>(null);
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [entryToDelete, setEntryToDelete] = useState<JournalEntry | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const todaySpark = useMemo(() => getDailySpark(), []);
 
+  // Dynamically calculate streak from real-time entries
+  const streakStats = useMemo(() => {
+    return calculateUserStreak(entries);
+  }, [entries]);
+
+  const totalCount = entries.length;
+
+  // Real-time synchronization with Firestore entries
+  useEffect(() => {
+    let isMounted = true;
+    const unsubscribe = subscribeToUserEntries(
+      user.uid,
+      (freshEntries) => {
+        if (!isMounted) return;
+        setEntries(freshEntries);
+        setLoading(false);
+
+        // Keep user document stats in sync with latest entries
+        const streakInfo = calculateUserStreak(freshEntries);
+        const newest = freshEntries[0];
+        updateUserStats(user.uid, {
+          streakCount: streakInfo.streakCount,
+          totalEntries: freshEntries.length,
+          lastEntryDate: newest ? (newest.entryDate || newest.createdAt || null) : null
+        });
+      },
+      (err) => {
+        console.error("Failed to subscribe to entries:", err);
+        // Fallback to one-time fetch if subscription has an error
+        getRecentEntries(user.uid).then(fallbackEntries => {
+          if (!isMounted) return;
+          setEntries(fallbackEntries);
+          setLoading(false);
+        });
+      }
+    );
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, [user.uid]);
+
   const handleConfirmDelete = async () => {
     if (!entryToDelete?.id) return;
     setIsDeleting(true);
     try {
-      await deleteJournalEntry(entryToDelete.id);
+      await deleteJournalEntry(entryToDelete.id, user.uid);
       setEntries(prev => prev.filter(e => e.id !== entryToDelete.id));
       setEntryToDelete(null);
     } catch (err) {
@@ -35,53 +87,90 @@ export default function Dashboard({ user }: { user: User }) {
     }
   };
 
-  // Reload data when the editor closes so we see the new entries
-  useEffect(() => {
-    if (isEditorOpen) return;
-    
-    const loadData = async () => {
-      const [userStats, recentEntries] = await Promise.all([
-        getUserStats(user.uid),
-        getRecentEntries(user.uid)
-      ]);
-      setStats(userStats);
-      setEntries(recentEntries);
-      setLoading(false);
-    };
-    loadData();
-  }, [user.uid, isEditorOpen]);
-
-  if (loading) return null;
+  if (loading) {
+    return (
+      <div className="min-h-[400px] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+          <p className="text-sm text-gray-500">Loading your journal...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="pb-20">
       {/* Metrics Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 px-8 mt-6">
-        <div className="bg-white border border-[#E3E3E3] rounded-2xl p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-amber-50 rounded-lg">
-              <Flame className="w-5 h-5 text-amber-500" />
+        {/* Day Streak Metric */}
+        <div className="bg-white border border-[#E3E3E3] rounded-2xl p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-amber-50 rounded-xl text-amber-500">
+                  <Flame className="w-5 h-5 fill-amber-500/20 text-amber-500" />
+                </div>
+                <span className="text-gray-700 font-semibold text-sm">Day Streak</span>
+              </div>
+              {streakStats.hasJournaledToday && streakStats.streakCount > 0 ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200/60 rounded-full text-[11px] font-medium">
+                  <span>🔥</span> Active Today
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-gray-50 text-gray-500 border border-gray-200/60 rounded-full text-[11px] font-medium">
+                  {streakStats.streakCount > 0 ? 'Due Today' : 'Ready'}
+                </span>
+              )}
             </div>
-            <span className="text-gray-600 font-medium">Day Streak</span>
+            <div className="flex items-baseline gap-2 mt-4">
+              <span className="text-3xl font-bold tracking-tight text-gray-900">
+                {streakStats.streakCount}
+              </span>
+              <span className="text-sm font-medium text-gray-500">
+                {streakStats.streakCount === 1 ? 'day' : 'days'}
+              </span>
+            </div>
           </div>
-          <div className="text-3xl font-semibold tracking-tight text-gray-900 mt-4">
-            {stats?.streakCount || 0}
-          </div>
+          <p className="text-xs text-gray-500 mt-4 leading-relaxed">
+            {streakStats.hasJournaledToday
+              ? "You've written today! Your streak is locked in."
+              : streakStats.streakCount > 0
+              ? "Reflect today to continue your streak."
+              : "Write a journal entry to start your streak."}
+          </p>
         </div>
         
-        <div className="bg-white border border-[#E3E3E3] rounded-2xl p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-blue-50 rounded-lg">
-              <Book className="w-5 h-5 text-blue-500" />
+        {/* Total Journals Metric */}
+        <div className="bg-white border border-[#E3E3E3] rounded-2xl p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-blue-50 rounded-xl text-blue-600">
+                  <Book className="w-5 h-5 text-blue-600" />
+                </div>
+                <span className="text-gray-700 font-semibold text-sm">Total Journals</span>
+              </div>
+              <span className="text-[11px] font-medium text-blue-600/80 bg-blue-50/70 px-2 py-0.5 rounded-full border border-blue-100">
+                Lifetime
+              </span>
             </div>
-            <span className="text-gray-600 font-medium">Total Journals</span>
+            <div className="flex items-baseline gap-2 mt-4">
+              <span className="text-3xl font-bold tracking-tight text-gray-900">
+                {totalCount}
+              </span>
+              <span className="text-sm font-medium text-gray-500">
+                {totalCount === 1 ? 'entry' : 'entries'}
+              </span>
+            </div>
           </div>
-          <div className="text-3xl font-semibold tracking-tight text-gray-900 mt-4">
-            {stats?.totalEntries || 0}
-          </div>
+          <p className="text-xs text-gray-500 mt-4 leading-relaxed">
+            {totalCount > 0 
+              ? "All thoughts and voice notes stored securely."
+              : "No thoughts recorded yet. Start your first note!"}
+          </p>
         </div>
 
-        {/* The Daily Spark (Daily Thought) - replacing AI Insight */}
+        {/* The Daily Spark (Daily Thought) */}
         <div className="bg-[#FCFBF9] border border-amber-100/70 rounded-2xl p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between gap-2 mb-1">
@@ -169,7 +258,7 @@ export default function Dashboard({ user }: { user: User }) {
               <div className="flex items-center justify-between mb-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm text-gray-500">
-                    {entry.entryDate ? format(entry.entryDate.toDate(), 'MMMM d, yyyy') : 'Recently'}
+                    {format(parseEntryDate(entry.entryDate || entry.createdAt), 'MMMM d, yyyy')}
                   </span>
                   {entry.context && (
                     <div className="flex items-center gap-1.5">

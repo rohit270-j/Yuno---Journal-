@@ -62,8 +62,23 @@ We use Google Cloud Secret Manager to securely store and inject the `GEMINI_API_
 
 ## Local Development
 1. Clone the repository and run `npm install`.
-2. Configure `.env` based on `.env.example`. 
-3. Run `npm run dev` to start the frontend and backend locally on port 3000.
+2. Configure `.env` based on `.env.example` by copying it:
+   ```bash
+   cp .env.example .env
+   ```
+3. Populate your `.env` with your Firebase client details and `GEMINI_API_KEY`:
+   ```env
+   GEMINI_API_KEY="your-gemini-api-key"
+   VITE_FIREBASE_API_KEY="your-firebase-api-key"
+   VITE_FIREBASE_AUTH_DOMAIN="your-project-id.firebaseapp.com"
+   VITE_FIREBASE_PROJECT_ID="your-project-id"
+   VITE_FIREBASE_STORAGE_BUCKET="your-project-id.firebasestorage.app"
+   VITE_FIREBASE_MESSAGING_SENDER_ID="your-messaging-sender-id"
+   VITE_FIREBASE_APP_ID="your-app-id"
+   VITE_FIREBASE_DATABASE_ID="your-firestore-database-id"
+   ```
+   > **Security Notice**: `.env` and `firebase-applet-config.json` are listed in `.gitignore` and are strictly excluded from source control.
+4. Run `npm run dev` to start the frontend and backend locally on port 3000.
 
 ## Cloud Run Deployment Flow
 

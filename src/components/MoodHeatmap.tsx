@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { JournalEntry } from '../lib/db-services';
+import { JournalEntry, parseEntryDate } from '../lib/db-services';
 import { format, subDays, startOfWeek, addDays, isSameDay } from 'date-fns';
 import { useAppStore } from '../store/useAppStore';
 
@@ -30,8 +30,9 @@ export default function MoodHeatmap({ entries }: MoodHeatmapProps) {
   const entryDateMap = useMemo(() => {
     const map = new Map<string, JournalEntry>();
     entries.forEach((e) => {
-      if (!e.entryDate) return;
-      const d = e.entryDate.toDate ? e.entryDate.toDate() : new Date(e.entryDate);
+      const rawDate = e.entryDate || e.createdAt;
+      if (!rawDate) return;
+      const d = parseEntryDate(rawDate);
       const key = format(d, 'yyyy-MM-dd');
       // If multiple, pick the one with mood or most recent
       if (!map.has(key) || (!map.get(key)?.mood && e.mood)) {

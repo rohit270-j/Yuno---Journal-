@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Sparkles, ArrowRight, Calendar } from 'lucide-react';
 import { format, differenceInYears, differenceInMonths } from 'date-fns';
-import { JournalEntry, fetchOnThisDayEntries } from '../lib/db-services';
+import { JournalEntry, fetchOnThisDayEntries, parseEntryDate } from '../lib/db-services';
 import { useAppStore } from '../store/useAppStore';
 
 interface TimeMachineCardProps {
@@ -38,7 +38,7 @@ export default function TimeMachineCard({ userId }: TimeMachineCardProps) {
   }
 
   const memory = memories[0];
-  const memoryDate = memory.entryDate?.toDate ? memory.entryDate.toDate() : new Date(memory.entryDate);
+  const memoryDate = parseEntryDate(memory.entryDate || memory.createdAt);
   const now = new Date();
   const yearsDiff = differenceInYears(now, memoryDate);
   const monthsDiff = differenceInMonths(now, memoryDate);

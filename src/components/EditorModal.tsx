@@ -5,7 +5,7 @@ import { X, Mic, Cloud, Loader2, Calendar, Hash, CloudOff, MicOff, Check, Image 
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { useGeolocation } from '../hooks/useGeolocation';
 import { uploadImageToStorage } from '../lib/storage-services';
-import { JournalEntry, saveEntry, deleteJournalEntry } from '../lib/db-services';
+import { JournalEntry, saveEntry, deleteJournalEntry, parseEntryDate } from '../lib/db-services';
 import MoodSelector, { MoodValue } from './MoodSelector';
 import debounce from 'lodash.debounce';
 import { useAppStore } from '../store/useAppStore';
@@ -50,18 +50,20 @@ export default function EditorModal({ user, onClose }: EditorModalProps) {
       fetchContext();
     }
   }, [activeEntry]);
-  const [entryDate, setEntryDate] = useState(
-    activeEntry?.entryDate?.toDate 
-      ? activeEntry.entryDate.toDate().toISOString().split('T')[0] 
-      : new Date().toISOString().split('T')[0]
-  );
+
+  const [entryDate, setEntryDate] = useState(() => {
+    if (!activeEntry?.entryDate) {
+      return format(new Date(), 'yyyy-MM-dd');
+    }
+    return format(parseEntryDate(activeEntry.entryDate), 'yyyy-MM-dd');
+  });
   const [entryId, setEntryId] = useState<string | null>(activeEntry?.id || null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [interimText, setInterimText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const todaySpark = useMemo(() => {
-    const d = entryDate ? new Date(entryDate + 'T00:00:00') : new Date();
+    const d = entryDate ? new Date(entryDate + 'T12:00:00') : new Date();
     return getDailySpark(d);
   }, [entryDate]);
 
@@ -124,7 +126,7 @@ export default function EditorModal({ user, onClose }: EditorModalProps) {
     setIsDeleting(true);
     try {
       debouncedSave.cancel();
-      await deleteJournalEntry(targetId);
+      await deleteJournalEntry(targetId, user.uid);
       setActiveEntry(null);
       onClose();
     } catch (err) {
@@ -161,6 +163,11 @@ export default function EditorModal({ user, onClose }: EditorModalProps) {
   useEffect(() => {
     if (!title.trim() && !content.trim() && tags.length === 0 && images.length === 0) return;
     
+    const [y, m, d] = entryDate.split('-').map(Number);
+    const safeEntryDate = (!isNaN(y) && !isNaN(m) && !isNaN(d))
+      ? new Date(y, m - 1, d, 12, 0, 0)
+      : new Date();
+
     const entryData: JournalEntry = {
       id: entryIdRef.current || undefined,
       userId: user.uid,
@@ -171,7 +178,7 @@ export default function EditorModal({ user, onClose }: EditorModalProps) {
       mood,
       context: locationContext || undefined,
       audioUrl: null,
-      entryDate: new Date(entryDate)
+      entryDate: safeEntryDate
     };
 
     debouncedSave(

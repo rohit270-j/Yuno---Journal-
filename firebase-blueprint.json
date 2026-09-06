@@ -1,0 +1,86 @@
+{
+  "entities": {
+    "UserStats": {
+      "title": "UserStats",
+      "description": "Aggregated journaling statistics and streak tracking for a user",
+      "type": "object",
+      "properties": {
+        "streakCount": {
+          "type": "number",
+          "description": "Consecutive calendar days of journaling"
+        },
+        "totalEntries": {
+          "type": "number",
+          "description": "Total number of journal entries created by the user"
+        },
+        "lastEntryDate": {
+          "type": "string",
+          "description": "ISO timestamp or Firestore timestamp of the most recent entry"
+        }
+      },
+      "required": ["streakCount", "totalEntries"]
+    },
+    "JournalEntry": {
+      "title": "JournalEntry",
+      "description": "Individual personal journal entry with multimedia, mood, and context",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Unique identifier of the owning user"
+        },
+        "title": {
+          "type": "string",
+          "description": "Optional title for the entry"
+        },
+        "content": {
+          "type": "string",
+          "description": "Full text reflection and markdown content"
+        },
+        "audioUrl": {
+          "type": "string",
+          "description": "Audio recording URL if voice-transcribed"
+        },
+        "images": {
+          "type": "array",
+          "description": "Array of attached image URLs"
+        },
+        "context": {
+          "type": "object",
+          "description": "Geographical location and weather context"
+        },
+        "mood": {
+          "type": "number",
+          "description": "Mood rating from 1 to 5"
+        },
+        "tags": {
+          "type": "array",
+          "description": "Categorical tags associated with entry"
+        },
+        "entryDate": {
+          "type": "string",
+          "description": "The calendar date associated with this journal entry"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when entry was first created"
+        },
+        "lastUpdated": {
+          "type": "string",
+          "description": "Timestamp when entry was last edited"
+        }
+      },
+      "required": ["userId", "content"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserStats",
+      "description": "User profile document storing stats and streak count"
+    },
+    "/entries/{entryId}": {
+      "schema": "JournalEntry",
+      "description": "Journal entries collection indexed by owner userId"
+    }
+  }
+}

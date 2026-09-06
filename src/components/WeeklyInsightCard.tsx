@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Sparkles, RefreshCw, Compass, CheckCircle2, ArrowRight } from 'lucide-react';
-import { JournalEntry } from '../lib/db-services';
+import { JournalEntry, parseEntryDate } from '../lib/db-services';
 import { format, subDays, isAfter } from 'date-fns';
 
 interface WeeklyInsightCardProps {
@@ -24,8 +24,9 @@ export default function WeeklyInsightCard({ entries, userId }: WeeklyInsightCard
   const recentWeekEntries = useMemo(() => {
     const sevenDaysAgo = subDays(new Date(), 7);
     return entries.filter((entry) => {
-      if (!entry.entryDate) return false;
-      const d = entry.entryDate.toDate ? entry.entryDate.toDate() : new Date(entry.entryDate);
+      const rawDate = entry.entryDate || entry.createdAt;
+      if (!rawDate) return false;
+      const d = parseEntryDate(rawDate);
       return isAfter(d, sevenDaysAgo);
     });
   }, [entries]);
@@ -54,7 +55,7 @@ export default function WeeklyInsightCard({ entries, userId }: WeeklyInsightCard
 
     try {
       const payloadEntries = recentWeekEntries.map((e) => {
-        const d = e.entryDate?.toDate ? e.entryDate.toDate() : new Date(e.entryDate);
+        const d = parseEntryDate(e.entryDate || e.createdAt);
         return {
           date: format(d, 'yyyy-MM-dd'),
           title: e.title || '',
